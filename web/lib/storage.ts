@@ -5,12 +5,30 @@ type State = {
   top3Ids: string[];
   queueIds: string[];
   focusEndsAt: number | null;
+  blockedDomains: string[];
 };
 
 const KEY = "pns_state_v1";
 
+const DEFAULT_BLOCKED = [
+  "tiktok.com",
+  "youtube.com",
+  "instagram.com",
+  "facebook.com",
+  "x.com",
+  "twitter.com",
+  "reddit.com",
+  "web.whatsapp.com",
+];
+
 function blank(): State {
-  return { tasks: [], top3Ids: [], queueIds: [], focusEndsAt: null };
+  return {
+    tasks: [],
+    top3Ids: [],
+    queueIds: [],
+    focusEndsAt: null,
+    blockedDomains: DEFAULT_BLOCKED,
+  };
 }
 
 export function loadState(): State {
@@ -18,7 +36,17 @@ export function loadState(): State {
   try {
     const raw = localStorage.getItem(KEY);
     if (!raw) return blank();
-    return JSON.parse(raw) as State;
+    const parsed = JSON.parse(raw) as Partial<State>;
+    const b = blank();
+    return {
+      ...b,
+      ...parsed,
+      tasks: parsed.tasks ?? [],
+      top3Ids: parsed.top3Ids ?? [],
+      queueIds: parsed.queueIds ?? [],
+      focusEndsAt: parsed.focusEndsAt ?? null,
+      blockedDomains: parsed.blockedDomains ?? DEFAULT_BLOCKED,
+    };
   } catch {
     return blank();
   }
@@ -87,4 +115,15 @@ export function clearFocus() {
 
 export function getFocusEndsAt(): number | null {
   return loadState().focusEndsAt;
+}
+
+// Blocked sites list (saved in browser)
+export function getBlockedDomains(): string[] {
+  return loadState().blockedDomains;
+}
+
+export function setBlockedDomains(domains: string[]) {
+  const s = loadState();
+  s.blockedDomains = domains;
+  saveState(s);
 }
