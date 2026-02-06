@@ -1,58 +1,89 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { loadState, setTop3 } from "@/lib/storage";
+import { getActiveTasks, setTop3 } from "@/lib/storage";
 
-export default function Pick3() {
-  const tasks = useMemo(() => loadState().tasks, []);
-  const [picked, setPicked] = useState<string[]>(loadState().top3Ids ?? []);
+export default function Pick3Page() {
+  const tasks = useMemo(() => getActiveTasks(), []);
+  const [picked, setPicked] = useState<string[]>([]);
+  const [error, setError] = useState("");
 
   function toggle(id: string) {
+    setError("");
     setPicked((prev) => {
-      const has = prev.includes(id);
-      if (has) return prev.filter((x) => x !== id);
-      if (prev.length >= 3) return prev;
+      if (prev.includes(id)) return prev.filter((x) => x !== id);
+      if (prev.length >= 3) {
+        setError("Pick only 3.");
+        return prev;
+      }
       return [...prev, id];
     });
   }
 
-  function onSave() {
+  function continueNext() {
+    if (picked.length !== 3) {
+      setError("Pick 3 tasks first.");
+      return;
+    }
     setTop3(picked);
     window.location.href = "/app/next";
   }
 
   return (
-    <main className="min-h-screen p-6 max-w-xl mx-auto space-y-4">
-      <h1 className="text-2xl font-bold">Pick 3 Must-Dos</h1>
-      <p className="text-slate-600">Stop. You do 3 things today. Not 20.</p>
+    <main className="min-h-screen p-6 max-w-2xl mx-auto space-y-4">
+      <h1 className="text-2xl font-bold">Pick 3</h1>
+      <p className="text-slate-600">
+        Only 3. This stops overwhelm.
+      </p>
 
-      <div className="text-sm text-slate-600">
-        Picked: <span className="font-semibold">{picked.length}</span>/3
+      {error ? <div className="text-red-600 font-semibold">{error}</div> : null}
+
+      <div className="border rounded-2xl p-4 space-y-2">
+        {tasks.length === 0 ? (
+          <p className="text-slate-600">No active tasks. Go add tasks first.</p>
+        ) : (
+          <ul className="space-y-2">
+            {tasks.map((t) => {
+              const on = picked.includes(t.id);
+              return (
+                <li
+                  key={t.id}
+                  className={`border rounded-xl p-3 flex items-start gap-3 ${
+                    on ? "bg-slate-50" : ""
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={on}
+                    onChange={() => toggle(t.id)}
+                  />
+                  <div className="flex-1">
+                    <div className="font-semibold">{t.text}</div>
+                    <div className="text-xs text-slate-500">
+                      {t.category.toUpperCase()}
+                      {t.time ? ` • ${t.time}` : ""}
+                    </div>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        )}
       </div>
 
-      <ul className="space-y-2">
-        {tasks.map((t) => (
-          <li key={t.id} className="border rounded-xl p-3 flex items-center justify-between">
-            <span>{t.text}</span>
-            <button
-              className={`px-3 py-1 rounded-lg text-sm font-semibold ${
-                picked.includes(t.id) ? "bg-black text-white" : "bg-slate-100"
-              }`}
-              onClick={() => toggle(t.id)}
-            >
-              {picked.includes(t.id) ? "Picked" : "Pick"}
-            </button>
-          </li>
-        ))}
-      </ul>
-
       <button
-        className="w-full bg-black text-white rounded-xl px-4 py-3 font-semibold disabled:opacity-40"
-        onClick={onSave}
-        disabled={picked.length !== 3}
+        className="w-full bg-black text-white rounded-xl px-4 py-3 font-semibold"
+        onClick={continueNext}
       >
-        Save 3 → Next Step
+        Continue to Next Step
       </button>
+
+      <a
+        className="block text-center border rounded-xl px-4 py-3 font-semibold"
+        href="/app/brain-dump"
+      >
+        Back
+      </a>
     </main>
   );
 }
