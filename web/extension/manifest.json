@@ -1,0 +1,18 @@
+{
+  "manifest_version": 3,
+  "name": "Project Next Step Shield",
+  "version": "0.1.0",
+  "description": "Blocks your distraction sites when Shield is ON.",
+  "action": {
+    "default_popup": "popup.html"
+  },
+  "background": {
+    "service_worker": "service_worker.js"
+  },
+  "permissions": [
+    "storage",
+    "declarativeNetRequest",
+    "declarativeNetRequestWithHostAccess"
+  ],
+  "host_permissions": ["<all_urls>"]
+}
