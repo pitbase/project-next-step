@@ -5,6 +5,7 @@ import {
   ensureDailyRoutineApplied,
   getActiveTasks,
   getPrefs,
+  getRoutines,
   setPrefs,
   touchActiveNow,
   getLastRemindedKey,
@@ -27,10 +28,7 @@ function todayKey(hhmm: string) {
 }
 
 function canNotify() {
-  return (
-    typeof Notification !== "undefined" &&
-    Notification.permission === "granted"
-  );
+  return typeof Notification !== "undefined" && Notification.permission === "granted";
 }
 
 function sendNotify(title: string, body: string) {
@@ -45,9 +43,8 @@ function sendNotify(title: string, body: string) {
 export default function ReminderDaemon() {
   const [banner, setBanner] = useState<string>("");
 
-  // Track activity (only while the app is open)
   useEffect(() => {
-    // ✅ NEW: auto-add daily routines once per day (no duplicates)
+    // auto-add routines once per day
     ensureDailyRoutineApplied();
 
     const onAct = () => touchActiveNow();
@@ -63,7 +60,6 @@ export default function ReminderDaemon() {
     };
   }, []);
 
-  // Main loop: once per minute
   useEffect(() => {
     const tick = () => {
       const prefs = getPrefs();
@@ -71,32 +67,64 @@ export default function ReminderDaemon() {
       // if silenced, do nothing
       if (prefs.silencedUntil && Date.now() < prefs.silencedUntil) return;
 
-      // Idle check: 3 hours
+      // onboarding nudge (only if nothing else is showing)
+      if (!prefs.hasOnboarded && !banner) {
+        setBanner("Coach: Do Setup once. It will customize your routine and reminders.");
+        return;
+      }
+
+      // Idle check: 3 hours (while app is open)
       const idleMs = Date.now() - prefs.lastActiveAt;
       if (idleMs > 3 * 60 * 60 * 1000) {
         setBanner("Hey. You’ve been away a while. Want to do ONE Next Step?");
         if (prefs.notificationsEnabled) {
-          sendNotify(
-            "Project Next Step",
-            "You’ve been away. Come back and do ONE Next Step."
-          );
+          sendNotify("Project Next Step", "You’ve been away. Come back and do ONE Next Step.");
         }
         return;
       }
 
-      // Time reminders: if a task matches current HH:MM
       const hhmm = nowHHMM();
-      const key = todayKey(hhmm);
+
+      // Schedule reminders (once per minute, once per day)
+      const r = getRoutines();
+      const scheduleKey = `SCHEDULE ${todayKey(hhmm)}`;
       const lastKey = getLastRemindedKey();
-      if (lastKey === key) return; // already reminded this minute
+
+      const scheduleHit =
+        hhmm === r.morningStart ||
+        hhmm === r.workStart ||
+        hhmm === r.eveningStart ||
+        hhmm === r.nightStart;
+
+      if (scheduleHit && lastKey !== scheduleKey) {
+        setLastRemindedKey(scheduleKey);
+
+        let msg = "";
+        if (hhmm === r.morningStart) msg = `Morning time (${hhmm}). Start your morning routine.`;
+        if (hhmm === r.workStart) msg = `Work starts now (${hhmm}). Pick 3 work tasks.`;
+        if (hhmm === r.eveningStart) msg = `Evening time (${hhmm}). Switch to home tasks.`;
+        if (hhmm === r.nightStart) msg = `Night routine time (${hhmm}). Wrap up and reset.`;
+
+        setBanner(msg);
+
+        if (prefs.notificationsEnabled) {
+          sendNotify("Routine time", msg);
+        }
+        return;
+      }
+
+      // Task-time reminders
+      const taskKey = todayKey(hhmm);
+      if (lastKey === taskKey) return;
 
       const tasks = getActiveTasks();
       const due = tasks.find((t) => t.time === hhmm);
+
       if (due) {
-        setLastRemindedKey(key);
+        setLastRemindedKey(taskKey);
         setBanner(`Time: ${hhmm}. Do this now: ${due.text}`);
         if (prefs.notificationsEnabled) {
-          sendNotify("Time to do this", `${due.text}`);
+          sendNotify("Time to do this", due.text);
         }
       }
     };
@@ -104,7 +132,7 @@ export default function ReminderDaemon() {
     tick();
     const id = setInterval(tick, 60_000);
     return () => clearInterval(id);
-  }, []);
+  }, [banner]);
 
   async function enableNotifications() {
     if (typeof Notification === "undefined") {
@@ -137,32 +165,24 @@ export default function ReminderDaemon() {
         <div className="text-slate-700">{banner}</div>
 
         <div className="flex gap-2 flex-wrap">
-          <a
-            className="px-4 py-2 rounded-xl bg-black text-white font-semibold"
-            href="/app/next"
-          >
+          <a className="px-4 py-2 rounded-xl bg-black text-white font-semibold" href="/app/next">
             Go to Next Step
           </a>
 
-          <button
-            className="px-4 py-2 rounded-xl border font-semibold"
-            onClick={() => setBanner("")}
-          >
+          <a className="px-4 py-2 rounded-xl border font-semibold" href="/app/setup">
+            Setup
+          </a>
+
+          <button className="px-4 py-2 rounded-xl border font-semibold" onClick={() => setBanner("")}>
             Dismiss
           </button>
 
-          <button
-            className="px-4 py-2 rounded-xl border font-semibold"
-            onClick={silence3h}
-          >
+          <button className="px-4 py-2 rounded-xl border font-semibold" onClick={silence3h}>
             Silence 3 hours
           </button>
 
           {!prefs.notificationsEnabled ? (
-            <button
-              className="px-4 py-2 rounded-xl border font-semibold"
-              onClick={enableNotifications}
-            >
+            <button className="px-4 py-2 rounded-xl border font-semibold" onClick={enableNotifications}>
               Enable notifications
             </button>
           ) : null}

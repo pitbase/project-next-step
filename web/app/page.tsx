@@ -5,8 +5,7 @@ export default function Home() {
         <h1 className="text-3xl font-bold">Project Next Step</h1>
 
         <p className="text-slate-600">
-          You’re not broken. You’re distracted. We fix that by doing one clear
-          next step.
+          Stop distractions. Do one next step. Feel peace.
         </p>
 
         <a
@@ -18,9 +17,23 @@ export default function Home() {
 
         <a
           className="inline-block w-full text-center border rounded-xl px-4 py-3 font-semibold"
+          href="/app/setup"
+        >
+          Setup (Quick Talk + Schedule)
+        </a>
+
+        <a
+          className="inline-block w-full text-center border rounded-xl px-4 py-3 font-semibold"
+          href="/app/routines"
+        >
+          Daily Routines (repeat every day)
+        </a>
+
+        <a
+          className="inline-block w-full text-center border rounded-xl px-4 py-3 font-semibold"
           href="/app/settings"
         >
-          Settings (Blocked Sites)
+          Blocked Sites
         </a>
 
         <a
