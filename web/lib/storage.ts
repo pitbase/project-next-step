@@ -17,6 +17,14 @@ export type Task = {
   doneAt: number | null;
 };
 
+export type RoutineItem = {
+  id: string;
+  text: string;
+  category: TaskCategory;
+  time: string | null; // "HH:MM"
+  enabled: boolean;
+};
+
 export type QuickTalkAnswers = {
   planningNow: string;
   annoyingPart: string;
@@ -31,10 +39,11 @@ export type Preferences = {
   defaultFocusMinutes: 15 | 25;
   hasOnboarded: boolean;
 
-  // reminders + idle
   notificationsEnabled: boolean;
   silencedUntil: number | null;
   lastActiveAt: number;
+
+  autoAddDailyRoutines: boolean; // NEW
 };
 
 export type Routines = {
@@ -58,8 +67,10 @@ type State = {
   routines: Routines;
   quickTalk: QuickTalkAnswers | null;
 
-  // used to avoid spamming reminders every second
-  lastRemindedKey: string | null; // e.g. "2026-02-05 07:30"
+  routineItems: RoutineItem[]; // NEW
+  lastRoutineAppliedDate: string | null; // "YYYY-MM-DD" local date // NEW
+
+  lastRemindedKey: string | null;
 };
 
 const KEY = "pns_state_v2";
@@ -83,6 +94,7 @@ const DEFAULT_PREFS: Preferences = {
   notificationsEnabled: false,
   silencedUntil: null,
   lastActiveAt: Date.now(),
+  autoAddDailyRoutines: true, // NEW
 };
 
 const DEFAULT_ROUTINES: Routines = {
@@ -104,6 +116,10 @@ function blank(): State {
     prefs: DEFAULT_PREFS,
     routines: DEFAULT_ROUTINES,
     quickTalk: null,
+
+    routineItems: [],
+    lastRoutineAppliedDate: null,
+
     lastRemindedKey: null,
   };
 }
@@ -128,6 +144,10 @@ export function loadState(): State {
       prefs: { ...DEFAULT_PREFS, ...(parsed.prefs ?? {}) },
       routines: { ...DEFAULT_ROUTINES, ...(parsed.routines ?? {}) },
       quickTalk: parsed.quickTalk ?? null,
+
+      routineItems: parsed.routineItems ?? [],
+      lastRoutineAppliedDate: parsed.lastRoutineAppliedDate ?? null,
+
       lastRemindedKey: parsed.lastRemindedKey ?? null,
     };
   } catch {
@@ -137,6 +157,125 @@ export function loadState(): State {
 
 export function saveState(state: State) {
   localStorage.setItem(KEY, JSON.stringify(state));
+}
+
+// -------- helpers --------
+function todayLocalYMD(): string {
+  const d = new Date();
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+// ---------------- Daily routines ----------------
+export function getRoutineItems(): RoutineItem[] {
+  return loadState().routineItems;
+}
+
+export function addRoutineItem(
+  text: string,
+  category: TaskCategory,
+  time: string | null
+) {
+  const s = loadState();
+  const trimmed = text.trim();
+  if (!trimmed) return;
+
+  s.routineItems.unshift({
+    id: crypto.randomUUID(),
+    text: trimmed,
+    category,
+    time,
+    enabled: true,
+  });
+  saveState(s);
+}
+
+export function toggleRoutineEnabled(id: string) {
+  const s = loadState();
+  const r = s.routineItems.find((x) => x.id === id);
+  if (!r) return;
+  r.enabled = !r.enabled;
+  saveState(s);
+}
+
+export function deleteRoutineItem(id: string) {
+  const s = loadState();
+  s.routineItems = s.routineItems.filter((x) => x.id !== id);
+  saveState(s);
+}
+
+// Adds routine tasks ONCE per day, no duplicates.
+// Returns true if it added tasks today.
+export function ensureDailyRoutineApplied(): boolean {
+  const s = loadState();
+  if (!s.prefs.autoAddDailyRoutines) return false;
+
+  const today = todayLocalYMD();
+  if (s.lastRoutineAppliedDate === today) return false;
+
+  const enabled = s.routineItems.filter((r) => r.enabled);
+  if (enabled.length === 0) {
+    s.lastRoutineAppliedDate = today;
+    saveState(s);
+    return false;
+  }
+
+  for (const r of enabled) {
+    s.tasks.push({
+      id: crypto.randomUUID(),
+      text: r.text,
+      category: r.category,
+      time: r.time,
+      done: false,
+      deleted: false,
+      createdAt: Date.now(),
+      doneAt: null,
+    });
+  }
+
+  s.lastRoutineAppliedDate = today;
+  saveState(s);
+  return true;
+}
+
+// Button use: "Add today's routine now"
+export function applyDailyRoutineNow(): { added: boolean; reason: string } {
+  const s = loadState();
+  const today = todayLocalYMD();
+
+  if (s.lastRoutineAppliedDate === today) {
+    return { added: false, reason: "Already added today." };
+  }
+
+  const enabled = s.routineItems.filter((r) => r.enabled);
+  if (enabled.length === 0) {
+    s.lastRoutineAppliedDate = today;
+    saveState(s);
+    return { added: false, reason: "No enabled routine items." };
+  }
+
+  for (const r of enabled) {
+    s.tasks.push({
+      id: crypto.randomUUID(),
+      text: r.text,
+      category: r.category,
+      time: r.time,
+      done: false,
+      deleted: false,
+      createdAt: Date.now(),
+      doneAt: null,
+    });
+  }
+
+  s.lastRoutineAppliedDate = today;
+  saveState(s);
+  return { added: true, reason: "Added today's routine tasks." };
+}
+
+export function getLastRoutineAppliedDate(): string | null {
+  return loadState().lastRoutineAppliedDate;
 }
 
 // ---------------- Tasks ----------------
@@ -149,7 +288,7 @@ export function addTask(
   const trimmed = text.trim();
   if (!trimmed) return;
 
-  const task: Task = {
+  s.tasks.push({
     id: crypto.randomUUID(),
     text: trimmed,
     category,
@@ -158,9 +297,8 @@ export function addTask(
     deleted: false,
     createdAt: Date.now(),
     doneAt: null,
-  };
+  });
 
-  s.tasks.push(task);
   saveState(s);
 }
 
@@ -170,7 +308,6 @@ export function getTasks(): Task[] {
 }
 
 export function getActiveTasks(): Task[] {
-  // not deleted, not done
   return getTasks().filter((t) => !t.done);
 }
 
@@ -182,7 +319,6 @@ export function toggleTaskDone(taskId: string) {
   t.done = !t.done;
   t.doneAt = t.done ? Date.now() : null;
 
-  // if the task is in the queue and got done, remove it from queue
   if (t.done) {
     s.queueIds = s.queueIds.filter((id) => id !== taskId);
     s.top3Ids = s.top3Ids.filter((id) => id !== taskId);
@@ -203,13 +339,17 @@ export function deleteTask(taskId: string) {
   saveState(s);
 }
 
-export function updateTask(taskId: string, patch: Partial<Pick<Task, "text" | "category" | "time">>) {
+export function updateTask(
+  taskId: string,
+  patch: Partial<Pick<Task, "text" | "category" | "time">>
+) {
   const s = loadState();
   const t = s.tasks.find((x) => x.id === taskId);
   if (!t || t.deleted) return;
 
   if (typeof patch.text === "string") t.text = patch.text.trim() || t.text;
-  if (typeof patch.category === "string") t.category = patch.category as TaskCategory;
+  if (typeof patch.category === "string")
+    t.category = patch.category as TaskCategory;
   if (patch.time === null || typeof patch.time === "string") t.time = patch.time;
 
   saveState(s);
@@ -223,7 +363,6 @@ export function setTop3(ids: string[]) {
 }
 
 function getNextValidTask(s: State): Task | null {
-  // skip missing/deleted/done tasks
   while (s.queueIds.length > 0) {
     const nextId = s.queueIds[0];
     const t = s.tasks.find((x) => x.id === nextId);
@@ -253,7 +392,6 @@ export function markDone() {
   t.done = true;
   t.doneAt = Date.now();
 
-  // remove from queue
   s.queueIds.shift();
   s.top3Ids = s.top3Ids.filter((id) => id !== t.id);
 

@@ -1,4 +1,10 @@
 "use client";
+<a
+  className="block text-center border rounded-xl px-4 py-3 font-semibold"
+  href="/app/routines"
+>
+  Daily Routines (repeat every day)
+</a>
 
 import { useEffect, useMemo, useState } from "react";
 import {

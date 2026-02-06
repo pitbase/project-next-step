@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import {
+  ensureDailyRoutineApplied,
   getActiveTasks,
   getPrefs,
   setPrefs,
@@ -26,7 +27,10 @@ function todayKey(hhmm: string) {
 }
 
 function canNotify() {
-  return typeof Notification !== "undefined" && Notification.permission === "granted";
+  return (
+    typeof Notification !== "undefined" &&
+    Notification.permission === "granted"
+  );
 }
 
 function sendNotify(title: string, body: string) {
@@ -43,6 +47,9 @@ export default function ReminderDaemon() {
 
   // Track activity (only while the app is open)
   useEffect(() => {
+    // ✅ NEW: auto-add daily routines once per day (no duplicates)
+    ensureDailyRoutineApplied();
+
     const onAct = () => touchActiveNow();
     window.addEventListener("mousemove", onAct);
     window.addEventListener("keydown", onAct);
@@ -69,7 +76,10 @@ export default function ReminderDaemon() {
       if (idleMs > 3 * 60 * 60 * 1000) {
         setBanner("Hey. You’ve been away a while. Want to do ONE Next Step?");
         if (prefs.notificationsEnabled) {
-          sendNotify("Project Next Step", "You’ve been away. Come back and do ONE Next Step.");
+          sendNotify(
+            "Project Next Step",
+            "You’ve been away. Come back and do ONE Next Step."
+          );
         }
         return;
       }
