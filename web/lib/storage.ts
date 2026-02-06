@@ -5,7 +5,9 @@ type State = {
   top3Ids: string[];
   queueIds: string[];
   focusEndsAt: number | null;
+
   blockedDomains: string[];
+  shieldOn: boolean;
 };
 
 const KEY = "pns_state_v1";
@@ -28,6 +30,7 @@ function blank(): State {
     queueIds: [],
     focusEndsAt: null,
     blockedDomains: DEFAULT_BLOCKED,
+    shieldOn: false,
   };
 }
 
@@ -38,6 +41,7 @@ export function loadState(): State {
     if (!raw) return blank();
     const parsed = JSON.parse(raw) as Partial<State>;
     const b = blank();
+
     return {
       ...b,
       ...parsed,
@@ -46,6 +50,7 @@ export function loadState(): State {
       queueIds: parsed.queueIds ?? [],
       focusEndsAt: parsed.focusEndsAt ?? null,
       blockedDomains: parsed.blockedDomains ?? DEFAULT_BLOCKED,
+      shieldOn: parsed.shieldOn ?? false,
     };
   } catch {
     return blank();
@@ -56,6 +61,7 @@ export function saveState(state: State) {
   localStorage.setItem(KEY, JSON.stringify(state));
 }
 
+// ---------- Tasks ----------
 export function addTask(text: string) {
   const s = loadState();
   const trimmed = text.trim();
@@ -101,6 +107,7 @@ export function replaceNextText(newText: string) {
   saveState(s);
 }
 
+// ---------- Focus Timer ----------
 export function startFocus(minutes: number) {
   const s = loadState();
   s.focusEndsAt = Date.now() + minutes * 60_000;
@@ -117,7 +124,7 @@ export function getFocusEndsAt(): number | null {
   return loadState().focusEndsAt;
 }
 
-// Blocked sites list (saved in browser)
+// ---------- Blocked sites list ----------
 export function getBlockedDomains(): string[] {
   return loadState().blockedDomains;
 }
@@ -125,5 +132,16 @@ export function getBlockedDomains(): string[] {
 export function setBlockedDomains(domains: string[]) {
   const s = loadState();
   s.blockedDomains = domains;
+  saveState(s);
+}
+
+// ---------- Shield ON/OFF ----------
+export function isShieldOn(): boolean {
+  return loadState().shieldOn;
+}
+
+export function setShieldOn(on: boolean) {
+  const s = loadState();
+  s.shieldOn = on;
   saveState(s);
 }
