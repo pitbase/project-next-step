@@ -1,13 +1,16 @@
 import { createClient } from "@supabase/supabase-js";
 
-const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const supabaseKey =
+  process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
-export const supabase = createClient(url, anon, {
+export const supabase = createClient(supabaseUrl, supabaseKey, {
   auth: {
+    // PKCE is the flow used by the "code" redirect you’re handling in /auth/callback
     flowType: "pkce",
+    detectSessionInUrl: true,
     persistSession: true,
     autoRefreshToken: true,
-    detectSessionInUrl: true,
   },
 });
