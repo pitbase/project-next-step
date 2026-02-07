@@ -1,42 +1,34 @@
 // web/lib/supabaseServer.ts
-import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
+import { createServerClient } from "@supabase/ssr";
 
-function mustEnv(name: string) {
-  const v = process.env[name];
-  if (!v) throw new Error(`Missing env var: ${name}`);
-  return v;
-}
-
-/**
- * Supabase server client (cookie-based)
- * NOTE: cookies() is async in newer Next.js versions, so we must await it. :contentReference[oaicite:2]{index=2}
- */
-export async function createClient() {
-  const url = mustEnv("NEXT_PUBLIC_SUPABASE_URL");
-  const anon = mustEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY");
-
-  // cookies() is async in newer Next.js versions
+export async function supabaseServer() {
+  // Next.js 16: cookies() is async, so you MUST await it
   const cookieStore = await cookies();
 
-  return createServerClient(url, anon, {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+
+  return createServerClient(url, anonKey, {
     cookies: {
       getAll() {
         return cookieStore.getAll();
       },
       setAll(cookiesToSet) {
+        // In some server contexts Next may prevent setting cookies; ignore safely.
         try {
           cookiesToSet.forEach(({ name, value, options }) => {
             cookieStore.set(name, value, options);
           });
         } catch {
-          // Setting cookies can fail during some server render phases.
-          // It's safe to ignore here; Supabase handles session refresh elsewhere.
+          // ignore
         }
       },
     },
   });
 }
 
-// Backwards-compatible alias (if you imported a different name elsewhere)
-export const createSupabaseServerClient = createClient;
+// Back-compat: your route imports `createClient`
+export async function createClient() {
+  return supabaseServer();
+}

@@ -3,29 +3,32 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabaseServer";
 
 export async function GET(request: Request) {
-  const { searchParams, origin } = new URL(request.url);
+  const url = new URL(request.url);
+  const origin = url.origin;
 
-  const code = searchParams.get("code");
+  const code = url.searchParams.get("code");
+  const next = url.searchParams.get("next") ?? "/app/cloud";
 
-  // Where to send the user after auth completes
-  let next = searchParams.get("next") ?? "/app/cloud";
-  if (!next.startsWith("/")) next = "/app/cloud";
+  const token_hash = url.searchParams.get("token_hash");
+  const type = url.searchParams.get("type"); // e.g. "magiclink"
 
-  if (code) {
-    const supabase = await createClient();
-    const { error } = await supabase.auth.exchangeCodeForSession(code);
+  const supabase = await createClient();
 
-    if (!error) {
-      // This forwarded-host handling is from Supabase docs for Next.js callback routes. :contentReference[oaicite:4]{index=4}
-      const forwardedHost = request.headers.get("x-forwarded-host");
-      const isLocalEnv = process.env.NODE_ENV === "development";
-
-      if (isLocalEnv) return NextResponse.redirect(`${origin}${next}`);
-      if (forwardedHost) return NextResponse.redirect(`https://${forwardedHost}${next}`);
-      return NextResponse.redirect(`${origin}${next}`);
+  try {
+    if (code) {
+      // PKCE/OAuth-style callback
+      await supabase.auth.exchangeCodeForSession(code);
+    } else if (token_hash && type) {
+      // Some email links come back as token_hash + type
+      await supabase.auth.verifyOtp({
+        type: type as any,
+        token_hash,
+      });
     }
+  } catch {
+    // If something goes wrong, still redirect to sign-in so user can retry.
+    return NextResponse.redirect(`${origin}/app/auth`);
   }
 
-  // If something failed, send them back to sign-in with a hint.
-  return NextResponse.redirect(`${origin}/app/auth?error=auth_callback_failed`);
+  return NextResponse.redirect(`${origin}${next}`);
 }
