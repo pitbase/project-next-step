@@ -16,7 +16,9 @@ export default function AuthPage() {
 
   async function sendMagicLink() {
     setStatus("Sending link…");
-    const redirectTo = `${location.origin}/auth/callback`;
+
+    // IMPORTANT: this must match where your callback page lives now
+    const redirectTo = `${location.origin}/app/auth/callback`;
 
     const { error } = await supabase.auth.signInWithOtp({
       email,

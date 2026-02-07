@@ -37,19 +37,31 @@ export default function CloudPage() {
         <div className="border rounded-2xl p-4 space-y-3">
           <div className="font-semibold">Coach:</div>
           <div className="text-slate-700">Sign in first.</div>
-          <a className="block text-center bg-black text-white rounded-xl px-4 py-3 font-semibold" href="/auth">
+
+          <a
+            className="block text-center bg-black text-white rounded-xl px-4 py-3 font-semibold"
+            href="/app/auth"
+          >
             Go to Sign In
           </a>
         </div>
       ) : (
         <div className="border rounded-2xl p-4 space-y-3">
-          <div className="text-slate-700">Signed in as: <b>{userEmail}</b></div>
+          <div className="text-slate-700">
+            Signed in as: <b>{userEmail}</b>
+          </div>
 
-          <button className="w-full bg-black text-white rounded-xl px-4 py-3 font-semibold" onClick={doSave}>
+          <button
+            className="w-full bg-black text-white rounded-xl px-4 py-3 font-semibold"
+            onClick={doSave}
+          >
             Save my data to cloud
           </button>
 
-          <button className="w-full border rounded-xl px-4 py-3 font-semibold" onClick={doLoad}>
+          <button
+            className="w-full border rounded-xl px-4 py-3 font-semibold"
+            onClick={doLoad}
+          >
             Load my data from cloud
           </button>
 
