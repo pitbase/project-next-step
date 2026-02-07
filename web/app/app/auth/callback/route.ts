@@ -1,40 +1,31 @@
+// web/app/app/auth/callback/route.ts
 import { NextResponse } from "next/server";
-import { createSupabaseServerClient } from "@/lib/supabaseServer";
+import { createClient } from "@/lib/supabaseServer";
 
 export async function GET(request: Request) {
-  const url = new URL(request.url);
-  const next = url.searchParams.get("next") ?? "/app/cloud";
+  const { searchParams, origin } = new URL(request.url);
 
-  const supabase = createSupabaseServerClient();
+  const code = searchParams.get("code");
 
-  // Support BOTH common patterns:
-  // 1) Magic link / OAuth style: ?code=...
-  // 2) PKCE email template flow: ?token_hash=...&type=...
-  const code = url.searchParams.get("code");
-  const token_hash = url.searchParams.get("token_hash");
-  const type = url.searchParams.get("type") as
-    | "signup"
-    | "magiclink"
-    | "recovery"
-    | "invite"
-    | "email_change"
-    | null;
+  // Where to send the user after auth completes
+  let next = searchParams.get("next") ?? "/app/cloud";
+  if (!next.startsWith("/")) next = "/app/cloud";
 
-  let ok = false;
+  if (code) {
+    const supabase = await createClient();
+    const { error } = await supabase.auth.exchangeCodeForSession(code);
 
-  try {
-    if (token_hash && type) {
-      const { error } = await supabase.auth.verifyOtp({ token_hash, type });
-      ok = !error;
-    } else if (code) {
-      const { error } = await supabase.auth.exchangeCodeForSession(code);
-      ok = !error;
+    if (!error) {
+      // This forwarded-host handling is from Supabase docs for Next.js callback routes. :contentReference[oaicite:4]{index=4}
+      const forwardedHost = request.headers.get("x-forwarded-host");
+      const isLocalEnv = process.env.NODE_ENV === "development";
+
+      if (isLocalEnv) return NextResponse.redirect(`${origin}${next}`);
+      if (forwardedHost) return NextResponse.redirect(`https://${forwardedHost}${next}`);
+      return NextResponse.redirect(`${origin}${next}`);
     }
-  } catch {
-    ok = false;
   }
 
-  // Always redirect somewhere predictable
-  const dest = ok ? next : "/app/auth";
-  return NextResponse.redirect(new URL(dest, url.origin));
+  // If something failed, send them back to sign-in with a hint.
+  return NextResponse.redirect(`${origin}/app/auth?error=auth_callback_failed`);
 }
