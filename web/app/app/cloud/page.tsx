@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { supabase } from "@/lib/supabaseClient";
+import { useEffect, useMemo, useState } from "react";
+import { createClient } from "@/lib/supabase/client";
 import { cloudLoad, cloudSave } from "@/lib/cloud";
 
 export default function CloudPage() {
+  const supabase = useMemo(() => createClient(), []);
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [status, setStatus] = useState("");
 
@@ -12,7 +13,7 @@ export default function CloudPage() {
     supabase.auth.getUser().then(({ data }) => {
       setUserEmail(data.user?.email ?? null);
     });
-  }, []);
+  }, [supabase]);
 
   async function doSave() {
     setStatus("Saving…");
@@ -24,9 +25,7 @@ export default function CloudPage() {
     setStatus("Loading…");
     const res = await cloudLoad();
     setStatus(res.message);
-    if (res.ok) {
-      setTimeout(() => location.assign("/app/brain-dump"), 500);
-    }
+    if (res.ok) setTimeout(() => location.assign("/app/brain-dump"), 500);
   }
 
   return (
@@ -37,7 +36,6 @@ export default function CloudPage() {
         <div className="border rounded-2xl p-4 space-y-3">
           <div className="font-semibold">Coach:</div>
           <div className="text-slate-700">Sign in first.</div>
-
           <a
             className="block text-center bg-black text-white rounded-xl px-4 py-3 font-semibold"
             href="/app/auth"
