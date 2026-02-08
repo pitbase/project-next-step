@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
 
-export default function AuthAliasPage() {
+export default function AuthRedirectPage() {
   redirect("/app/auth");
 }
