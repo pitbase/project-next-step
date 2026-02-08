@@ -1,45 +1,20 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 
-function safeNextPath(input: string | null, fallback: string) {
-  if (!input) return fallback;
-  // prevent open-redirects (only allow in-app paths)
-  if (!input.startsWith("/")) return fallback;
-  if (input.startsWith("//")) return fallback;
-  return input;
-}
-
 export default function AuthPage() {
-  const searchParams = useSearchParams();
-
   const [email, setEmail] = useState("");
   const [status, setStatus] = useState("");
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [cooldown, setCooldown] = useState(0);
 
-  // Where to go AFTER login (default: Pro payment page)
-  const nextPath = useMemo(() => {
-    return safeNextPath(searchParams.get("next"), "/app/pro");
-  }, [searchParams]);
-
   useEffect(() => {
-    // Show any auth errors that came back in the URL (otp_expired, access_denied, etc.)
-    const errorDescription =
-      searchParams.get("error_description") ||
-      searchParams.get("message") ||
-      (searchParams.get("error") ? "Sign-in failed. Please request a new link." : "");
-
-    if (errorDescription) setStatus(decodeURIComponent(errorDescription));
-
     supabase.auth.getUser().then(({ data }) => {
       setUserEmail(data.user?.email ?? null);
     });
-  }, [searchParams]);
+  }, []);
 
-  // simple cooldown to stop rapid re-sends (helps avoid rate limits)
   useEffect(() => {
     if (cooldown <= 0) return;
     const t = setInterval(() => setCooldown((c) => c - 1), 1000);
@@ -49,11 +24,8 @@ export default function AuthPage() {
   async function sendMagicLink() {
     setStatus("Sending link…");
 
-    // Supabase sends the user back to this URL after they click the email link
-    // This is exactly how Supabase documents emailRedirectTo usage. :contentReference[oaicite:1]{index=1}
-    const redirectTo = `${location.origin}/app/auth/callback?next=${encodeURIComponent(
-      nextPath
-    )}`;
+    // This must be allowed in Supabase Redirect URLs
+    const redirectTo = `${location.origin}/app/auth/callback`;
 
     const { error } = await supabase.auth.signInWithOtp({
       email,
@@ -66,7 +38,7 @@ export default function AuthPage() {
     }
 
     setStatus("Check your email. Click the link to sign in.");
-    setCooldown(60); // 60 seconds
+    setCooldown(60);
   }
 
   async function signOut() {
@@ -84,12 +56,11 @@ export default function AuthPage() {
           <div className="font-semibold">You are signed in as:</div>
           <div className="text-slate-700">{userEmail}</div>
 
-          {/* After sign-in, send them to Pro so they can pay */}
           <a
             className="block text-center bg-black text-white rounded-xl px-4 py-3 font-semibold"
-            href={nextPath}
+            href="/app/pro"
           >
-            Continue (Go to Pro)
+            Continue to Pro (Payment)
           </a>
 
           <button
@@ -107,8 +78,6 @@ export default function AuthPage() {
             placeholder="you@email.com"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            autoComplete="email"
-            inputMode="email"
           />
 
           <button
