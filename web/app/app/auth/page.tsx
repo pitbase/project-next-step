@@ -1,24 +1,59 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 
+function safeNextPath(input: string | null, fallback: string) {
+  if (!input) return fallback;
+  // prevent open-redirects (only allow in-app paths)
+  if (!input.startsWith("/")) return fallback;
+  if (input.startsWith("//")) return fallback;
+  return input;
+}
+
 export default function AuthPage() {
+  const searchParams = useSearchParams();
+
   const [email, setEmail] = useState("");
   const [status, setStatus] = useState("");
   const [userEmail, setUserEmail] = useState<string | null>(null);
+  const [cooldown, setCooldown] = useState(0);
+
+  // Where to go AFTER login (default: Pro payment page)
+  const nextPath = useMemo(() => {
+    return safeNextPath(searchParams.get("next"), "/app/pro");
+  }, [searchParams]);
 
   useEffect(() => {
+    // Show any auth errors that came back in the URL (otp_expired, access_denied, etc.)
+    const errorDescription =
+      searchParams.get("error_description") ||
+      searchParams.get("message") ||
+      (searchParams.get("error") ? "Sign-in failed. Please request a new link." : "");
+
+    if (errorDescription) setStatus(decodeURIComponent(errorDescription));
+
     supabase.auth.getUser().then(({ data }) => {
       setUserEmail(data.user?.email ?? null);
     });
-  }, []);
+  }, [searchParams]);
+
+  // simple cooldown to stop rapid re-sends (helps avoid rate limits)
+  useEffect(() => {
+    if (cooldown <= 0) return;
+    const t = setInterval(() => setCooldown((c) => c - 1), 1000);
+    return () => clearInterval(t);
+  }, [cooldown]);
 
   async function sendMagicLink() {
     setStatus("Sending link…");
 
-    // Send the user back to our server callback route so PKCE/code exchange is handled server-side.
-    const redirectTo = `${location.origin}/app/auth/callback?next=/app/cloud`;
+    // Supabase sends the user back to this URL after they click the email link
+    // This is exactly how Supabase documents emailRedirectTo usage. :contentReference[oaicite:1]{index=1}
+    const redirectTo = `${location.origin}/app/auth/callback?next=${encodeURIComponent(
+      nextPath
+    )}`;
 
     const { error } = await supabase.auth.signInWithOtp({
       email,
@@ -27,9 +62,11 @@ export default function AuthPage() {
 
     if (error) {
       setStatus(error.message);
-    } else {
-      setStatus("Check your email. Open the link in the SAME browser you requested it in.");
+      return;
     }
+
+    setStatus("Check your email. Click the link to sign in.");
+    setCooldown(60); // 60 seconds
   }
 
   async function signOut() {
@@ -47,11 +84,12 @@ export default function AuthPage() {
           <div className="font-semibold">You are signed in as:</div>
           <div className="text-slate-700">{userEmail}</div>
 
+          {/* After sign-in, send them to Pro so they can pay */}
           <a
             className="block text-center bg-black text-white rounded-xl px-4 py-3 font-semibold"
-            href="/app/cloud"
+            href={nextPath}
           >
-            Go to Cloud Sync
+            Continue (Go to Pro)
           </a>
 
           <button
@@ -69,17 +107,20 @@ export default function AuthPage() {
             placeholder="you@email.com"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
+            autoComplete="email"
+            inputMode="email"
           />
 
           <button
-            className="w-full bg-black text-white rounded-xl px-4 py-3 font-semibold"
+            className="w-full bg-black text-white rounded-xl px-4 py-3 font-semibold disabled:opacity-60"
             onClick={sendMagicLink}
+            disabled={!email || cooldown > 0}
           >
-            Send me a sign-in link
+            {cooldown > 0 ? `Wait ${cooldown}s…` : "Send me a sign-in link"}
           </button>
 
           <div className="text-xs text-slate-500">
-            Tip: open the email link in the <b>same browser</b> you used to request it.
+            Tip: open the email link in the same browser you used to request it.
           </div>
         </div>
       )}
